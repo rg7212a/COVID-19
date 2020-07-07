@@ -1,0 +1,362 @@
+---
+title: "COVID-19 HW"
+author: "Rabya Ghafoor"
+date: "4/9/2020"
+output: pdf_document
+---
+```{r}
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+```
+1.
+```{r}
+
+dat <- 
+  read_csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
+total_by_state <- dat %>%
+  group_by(state, date) %>%
+  summarize(total_deaths = sum(deaths), total_cases = sum(cases)) %>%
+  arrange(desc(total_deaths))
+
+total_by_state
+```
+
+
+2. 
+```{r}
+dat_small <-
+  dat %>%
+ filter(state %in% c("District of Columbia", "Maryland", "Virginia"))  %>%
+  mutate(county = factor(county))
+dat_filter <-
+  dat_small %>%
+  filter(county %in% c("Alexandria city", "Anne Arundel", "Arlington", "Charles", "Arlington", "District of Columbia", "Fairfax", "Fredrick", "Howard", "Montgomery", "Prince George's", "Prince William"))
+
+dat_filter %>%
+  filter(state == "Virginia" | state == "Maryland" | state == "District of Columbia") %>%
+  ggplot(aes(x = date, y = cases, group = county, col = county)) +
+  geom_line() +
+  geom_point() +
+  facet_wrap(~ state) +
+  scale_y_log10() 
+  
+```
+
+3.
+
+
+```{r}
+dat <-
+  read_csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
+deaths_by_state <- dat %>%
+  group_by(state,date) %>%
+  summarize(total_deaths = sum(deaths)) %>%
+  ungroup() %>%
+  arrange(desc(total_deaths))
+deaths_by_state %>% 
+  filter(date == max(date))
+```
+```{r}
+
+cases_by_state <- dat %>%
+  group_by(state, date) %>%
+  summarize(total_cases = sum(cases)) %>%
+  ungroup() %>%
+  arrange(desc(total_cases))
+cases_by_state
+```
+
+
+```{r}
+DMV_case <- cases_by_state  %>%
+  filter(state %in% c("District of Columbia", "Maryland", "Virginia")) %>%
+  group_by(date) %>%
+  summarize(total_cases_date = sum(total_cases)) %>%
+  ungroup() %>%
+  arrange(desc(total_cases_date))
+DMV_case
+```
+```{r}
+DMV_death <- deaths_by_state  %>%
+  filter(state %in% c("District of Columbia", "Maryland", "Virginia")) %>%
+  group_by(date) %>%
+  summarize(total_deaths_date = sum(total_deaths)) %>%
+  ungroup() %>%
+  arrange(desc(total_deaths_date))
+DMV_death
+```
+
+```{r}
+DMV <- DMV_death %>%
+  mutate(total_cases_date = DMV_case$total_cases_date)
+DMV
+```
+  
+```{r}
+DMV %>% 
+  ggplot(aes(x = date, y = total_cases_date)) +
+  geom_line() +
+  geom_point () 
+   
+```
+```{r}
+DMV %>%
+ ggplot(aes(x = date, y = total_deaths_date)) +
+  geom_line(color = 'red') +
+  geom_point ()
+```
+
+
+4.
+```{r warning = FALSE, message = FALSE}
+#Recieved help from Erin
+library(lubridate)
+library(tidyr)
+wdat <- read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/archived_data/archived_time_series/time_series_19-covid-Confirmed_archived_0325.csv")
+
+wdat$`Province/State`[is.na(wdat$`Province/State`)] <- " "
+CS <- paste0(wdat$`Country/Region` , sep = " ", wdat$`Province/State`)
+wdat1 <- wdat %>%
+  mutate("Country/State" = CS)
+wdat1$`Province/State`[wdat$`Province/State` == " "] <- "NA"
+wdat_clean <- wdat1 %>%
+  dplyr::select(`Country/State` , `Province/State` , `Country/Region`, everything()) %>%
+  pivot_longer(cols = -c(`Country/State`, `Province/State` , `Country/Region` , Lat, Long), names_to = 'Date', values_to = "Confirmed_Cases", values_drop_na = TRUE) %>%
+  mutate(Lat = as.integer(Lat)) %>%
+  mutate(Long = as.integer(Long)) %>%
+  mutate(Date = as.character(Date)) %>%
+  mutate(Date = as.Date(Date, "%m/%d/%y"))
+wdat_clean
+```
+
+
+5. 
+```{r}
+library(countrycode)
+continent <- countrycode(sourcevar = wdat_clean[[3]], origin = "country.name", destination = "continent")
+
+new_wdat <- wdat_clean %>%
+  mutate(continet = continent) %>%
+  mutate(continent= case_when(
+    `Country/Region` == "Akrotiri and Dhekelia" ~ "South-Eastern Asia",
+    `Country/Region` == "Central African Rep." ~ "Middle Africa",
+    `Country/Region` == "Channel Islands" ~ "North America",
+    `Country/Region`== "Christmas Island" ~ "Australia and New Zealand",
+    `Country/Region` == "Cocos Island" ~ "Australia and New Zealand", 
+    `Country/Region` == "Czechoslovakia" ~ "Eastern Europe",
+    `Country/Region` == "East Germany" ~ "Western Europe",
+    `Country/Region` == "Eritrea and Ethiopia" ~ "Eastern Africa",
+    `Country/Region` == "Kosovo" ~ "Eastern Europe",
+    `Country/Region` == "North Yemen (former)" ~ "South-Eastern Asia", 
+    `Country/Region` == "Serbia amd Montenegro" ~ "Eastern Europe",
+    `Country/Region` == "South Yemen (former)" ~ "South-Eastern Asia",
+    `Country/Region` == "St. Martin" ~ "Caribbean",
+    `Country/Region` == "Yuogoslavia" ~ "Eastern Europe",
+    TRUE ~ continent)) %>%
+  select(continent,  `Country/Region`, `Date`, everything()) %>%
+  arrange(continent,  `Country/Region`, `Date`)
+
+tbl_df(new_wdat)
+
+new_wdat$`continent`[is.na(new_wdat$`continent`)] <- " "
+new_wdat <- subset(new_wdat, select = -c(continet) )
+new_wdat
+```
+
+
+6.
+```{r}
+new_max <- new_wdat %>%
+  group_by(`Country/State`,  `Country/Region`, `continent`) %>%
+  summarize(ttl = sum(Confirmed_Cases)) %>%
+  ungroup() %>%
+  arrange(desc(ttl)) %>%
+  slice(1:25)
+new_max
+```
+
+7.
+```{r}
+new_graph <- new_wdat %>%
+  group_by(`Country/State`,  `Country/Region`, `continent`, `Date`) %>%
+  summarize(Confirmed_Cases = sum(Confirmed_Cases)) %>%
+  ungroup() %>%
+  arrange(desc(Confirmed_Cases))
+
+new_graph
+```
+
+```{r}
+wdat_small <-
+  new_graph %>%
+ filter(continent %in% c("Asia", "Americas", "Europe"))  %>%
+  mutate(`Country/State` = factor(`Country/State`))
+wdat_filter <-
+  wdat_small %>%
+  filter(`Country/State` %in% c("China Guangdong", "China Hunan" , "China Hubei" , "China Zhejiang", "China Anhui" , "Germany", "Iran", "Italy", "Korea, South" ,  "Netherlands Netherlands", "China Jiangxi", "China Shandong", "China Jiangsu" , "United Kingdom United Kingdom" , "Cruise Ship Diamond Princess", "China Sichuan" , "US New York", "China Heilongjiang", "Belgium" , "France France" , "China Beijing" , "Spain", "US New Jersey", "US Washington", "China Chongqing", "Switzerland", "Austria", "Brazil", "Denmark_Denmark", "US California", "Portugal"))
+
+wdat_filter %>%
+  filter(continent == "Asia" | continent == "Americas" | continent == "Europe") %>%
+  ggplot(aes(x = `Date`, y = `Confirmed_Cases`, group = `Country/State`, col = `Country/State`)) +
+  geom_line() +
+  geom_point() +
+  facet_wrap(~ continent) +
+  scale_y_log10() 
+  
+```
+
+
+8. 
+```{r}
+NY_csse <- new_graph %>%
+ filter(`Country/State` %in% c("US New York")) %>%
+  group_by(Date) %>%
+  summarize(total_cases_date = sum(Confirmed_Cases)) %>%
+  ungroup() %>%
+  arrange(desc(total_cases_date))
+NY_csse
+
+NY_times <- cases_by_state  %>%
+  filter(state %in% c("New York")) %>%
+  group_by(date) %>%
+  summarize(total_cases_date = sum(total_cases)) %>%
+  ungroup() %>%
+  arrange(desc(total_cases_date))
+NY_times
+```
+```{r}
+merge(x = NY_csse, y = NY_times, by = "total_cases_date", all = TRUE)
+```
+When comparing both data frames the date does not entirely match in terms of the number of cases reported each day. Although on some day both sources have reported the same number of cases, in general the NY times overestiamtes the number of confirmed cases by a couple of thousands. 
+   
+```{r}
+NY_times %>% 
+  ggplot(aes(x = date, y = total_cases_date)) +
+  geom_line(color = 'red') +
+  geom_point (color = 'blue') +
+  scale_y_log10() 
+```
+
+
+9.
+```{r}
+Slowed_cases <- new_wdat %>% 
+  filter(`Country/State` %in% c("China Hubei", "Cruise Ship Diamond Princess", "China Hunan", "China Guangdong", "China Zhejiang" )) 
+
+Slowed_cases %>%
+  ggplot(aes(x = Date, y = Confirmed_Cases)) +
+  geom_point() +
+  facet_wrap(~ `Country/State`, scales = "free")
+
+```
+10.
+
+```{r}
+Hubei_cases <- new_wdat %>% 
+  filter(`Country/State` %in% c("China Hubei" ))
+  
+Hubei_cases %>%
+  ggplot(aes(x = Date, y = Confirmed_Cases)) +
+  geom_point() +
+  facet_wrap(~ `Country/State`, scales = "free")
+
+```
+
+```{r} 
+Hubei1_cases <- new_wdat %>% 
+  filter(`Country/State` %in% c("China Hubei" )) %>%
+  mutate(Date = as.integer(Date))
+  
+x = Hubei1_cases$Date
+y = Hubei1_cases$Confirmed_Cases
+
+```  
+```{r}
+sigmoid = function(x, params) {
+  params[1] / (1 + exp(-params[2] * (x - params[3])))
+}
+
+
+fitmodel <- nls(y ~ K /(1 + exp(-B * (x - t0))), data = Hubei1_cases,
+                start = list(K = 60000, B = 0.5,  t0= 18300))
+```
+
+```{r}
+library(broom)
+summary(fitmodel)
+broom::glance(fitmodel)
+
+```
+
+```{r}
+plot(Hubei1_cases$Date, Hubei1_cases$Confirmed_Cases)
+lines(Hubei1_cases$Date, predict(fitmodel, list(x = Hubei1_cases$Date)), col = 'skyblue', lwd = 3)
+
+```
+
+11. 
+```{r}
+fitmodel2 <- nls(y ~ K /(1 + exp(-B * (x - t0)))^(1/v), data = Hubei1_cases,
+                start = list(K = 60000, B = 0.5,  t0= 18300, v = 1.490 ))
+
+plot(Hubei1_cases$Date, Hubei1_cases$Confirmed_Cases)
+lines(Hubei1_cases$Date, predict(fitmodel, list(x = Hubei1_cases$Date)), col = 'skyblue', lwd = 3)
+lines(Hubei1_cases$Date, predict(fitmodel2, list(x = Hubei1_cases$Date)), col = 'red', lwd = 1)
+
+summary(fitmodel2)
+broom::glance(fitmodel2)
+```
+
+12. 
+```{r}
+library(purrr)
+library(modelr)
+```
+```{r}
+by_country <- Slowed_cases %>%
+    group_by(`Country/State`, continent) %>%
+    nest()
+by_country %>% head
+```
+```{r}
+country_model <- function(df) {
+    nls(y ~ K /(1 + exp(-B * (x - t0)))^(1/v), data = df,
+                start = list(K = 60000, B = 0.5,  t0= 18300, v = 1.490 ))
+}
+```
+```{r}
+by_country <- by_country %>%
+    mutate(model = map(.x = data, .f = country_model))
+by_country %>% head()
+```
+```{r}
+by_country <- by_country %>%
+    mutate(
+        preds  = map2(.x = data, .y = model, .f = add_predictions),
+        resids = map2(.x = data, .y = model, .f = add_residuals)
+    )
+by_country %>% head()
+```
+
+#Unnesting
+```{r}
+preds <- unnest(data = by_country, preds)
+preds %>% head()
+```
+```{r}
+resids <- unnest(data = by_country, resids)
+resids %>% head()
+```
+```{r}
+tidy(country_model(by_country))
+```
+
+```{r}
+tidy <- by_country %>% 
+    mutate(tidy = map(model, broom::tidy)) %>% 
+    unnest(tidy, .drop = TRUE)
+```
+```{r}
+tidy
+```
